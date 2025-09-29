@@ -1,0 +1,14 @@
+agent:
+  model:
+    name: openai/gpt-oss-120b           # Model provider and name:contentReference[oaicite:7]{index=7}
+    api_base: http://localhost:8000/v1  # URL of the vLLM OpenAI-compatible server:contentReference[oaicite:8]{index=8}
+    api_key: "my_dummy_key_12345"       # API key (dummy, since vLLM may not enforce it)
+    per_instance_cost_limit: 0          # Disable cost tracking for local model:contentReference[oaicite:9]{index=9}
+    total_cost_limit: 0
+    per_instance_call_limit: 100        # Instead of cost, limit by call count or steps:contentReference[oaicite:10]{index=10}
+    max_input_tokens: 0                # Disable input size check (set 0 or large value):contentReference[oaicite:11]{index=11}
+  tools:
+    # Use function calling if model supports it; otherwise use thought_action parser
+    parse_function:
+      type: "function_calling"
+  history_processors: []  # No Anthropic-specific processors for local model:contentReference[oaicite:12]{index=12}

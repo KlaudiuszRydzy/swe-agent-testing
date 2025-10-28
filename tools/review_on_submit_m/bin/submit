@@ -13,6 +13,7 @@ from registry import registry
 def main() -> None:
     parser = argparse.ArgumentParser(description="Submit changes for review")
     parser.add_argument("-f", "--force", action="store_true", help="Force submit without review")
+    parser.add_argument("--confirm", type=str, default="", help="Confirmation message (ignored, for model compatibility)")
     args = parser.parse_args()
 
     repo_root = registry.get("ROOT", os.getenv("ROOT"))

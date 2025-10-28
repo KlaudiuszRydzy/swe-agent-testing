@@ -396,6 +396,7 @@ class FunctionCallingParser(AbstractParseFunction, BaseModel):
 
     def _parse_tool_call(self, tool_call: dict, commands: list[Command]):
         name = tool_call["function"]["name"]
+        name = name.split('<|channel|>')[0] if '<|channel|>' in name else name
         command = {c.name: c for c in commands}.get(name)
         if not command:
             msg = f"Command '{name}' not found in list of available commands."
@@ -403,9 +404,18 @@ class FunctionCallingParser(AbstractParseFunction, BaseModel):
         if not isinstance(tool_call["function"]["arguments"], dict):
             try:
                 values = json.loads(tool_call["function"]["arguments"])
-            except json.JSONDecodeError:
-                msg = "Tool call arguments are not valid JSON."
-                raise FunctionCallingFormatError(msg, "invalid_json")
+            except json.JSONDecodeError as e:
+                raw_args = tool_call["function"]["arguments"]
+                msg = (
+                    f"Tool call arguments are not valid JSON.\n"
+                    f"Received: {raw_args}\n"
+                    f"Error: {str(e)}\n\n"
+                    f"Common fixes:\n" 
+                    f"- Use double quotes (\") for all keys and string values\n"
+                    f"- Escape special characters in strings\n"
+                    f"- Don't mix quote types: '] or \"] should be just \"\n\n"
+                )
+                raise FunctionCallingFormatError(msg, "invalid_json", raw_arguments=raw_args, json_error=str(e))
         required_args = {arg.name for arg in command.arguments if arg.required}
         missing_args = required_args - values.keys()
         if missing_args:
@@ -438,7 +448,49 @@ class FunctionCallingParser(AbstractParseFunction, BaseModel):
 
     def __call__(self, model_response: dict, commands: list[Command], strict=False):
         message = model_response["message"]
+        if not message and "reasoning_content" in model_response:
+            message = model_response["reasoning_content"]
         tool_calls = model_response.get("tool_calls", None)
+        
+        if tool_calls is None or len(tool_calls) != 1:
+         if message and isinstance(message, str):
+            try:
+                parsed = json.loads(message.strip())
+                if isinstance(parsed, dict) and "command" in parsed:
+                    command_name = parsed["command"]
+                    # Create fake tool call matching litellm format
+                    fake_tool_call = {
+                        "type": "function",
+                        "id": "fallback-tool-call",
+                        "function": {
+                            "name": command_name,
+                            "arguments": "{}"
+                        }
+                    }
+                    tool_calls = [fake_tool_call]
+                    # Use reasoning_content as thought since message was the JSON
+                    if "reasoning_content" in model_response:
+                        message = model_response["reasoning_content"]
+                    else:
+                        message = ""
+            except (json.JSONDecodeError, KeyError, TypeError):
+                pass  # Not JSON or wrong format, continue to error
+        
+        if tool_calls is None or len(tool_calls) == 0:
+            fake_tool_call = {
+                "type": "function",
+                "id": "auto-submit",
+                "function": {
+                    "name": "submit",
+                    "arguments": "{}"
+                }
+            }
+            tool_calls = [fake_tool_call]
+            if "reasoning_content" in model_response and model_response["reasoning_content"]:
+                message = model_response["reasoning_content"]
+            elif not message:
+                message = "Auto-submitting (model indicated task completion)"
+                
         if tool_calls is None or len(tool_calls) != 1:
             num_tools = len(tool_calls) if tool_calls else 0
             msg = (

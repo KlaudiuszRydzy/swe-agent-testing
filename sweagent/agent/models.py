@@ -769,6 +769,15 @@ class LiteLLMModel(AbstractModel):
                 and response.choices[i].message.thinking_blocks  # type: ignore
             ):
                 output_dict["thinking_blocks"] = response.choices[i].message.thinking_blocks  # type: ignore
+                
+            if hasattr(response.choices[i].message, "reasoning_content") and response.choices[i].message.reasoning_content:
+                output_dict["reasoning_content"] = response.choices[i].message.reasoning_content
+            elif (
+                hasattr(response.choices[i].message, "provider_specific_fields")  # type: ignore
+                and response.choices[i].message.provider_specific_fields  # type: ignore   
+                and response.choices[i].message.provider_specific_fields.get("reasoning_content")  # type: ignore
+            ):
+                output_dict["reasoning_content"] = response.choices[i].message.provider_specific_fields["reasoning_content"] # type: ignore
             outputs.append(output_dict)
         self._update_stats(input_tokens=input_tokens, output_tokens=output_tokens, cost=cost)
         return outputs
